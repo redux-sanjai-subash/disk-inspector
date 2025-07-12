@@ -4,13 +4,12 @@ import boto3
 import time
 import sys
 
-def run_linux_disk_check(instance_id):
+def run_disk_check(instance_id):
     ssm = boto3.client('ssm')
 
     print(f"\n🛠 Sending disk inspection command to Linux instance: {instance_id}...\n")
 
-    # The shell script to run
-    linux_commands = [
+    commands = [
         'echo "📊 Disk Usage Summary:"',
         'df -h',
         '',
@@ -25,23 +24,19 @@ def run_linux_disk_check(instance_id):
         response = ssm.send_command(
             InstanceIds=[instance_id],
             DocumentName="AWS-RunShellScript",
-            Parameters={'commands': linux_commands},
-            CloudWatchOutputConfig={
-                'CloudWatchOutputEnabled': False
-            }
+            Parameters={'commands': commands},
+            CloudWatchOutputConfig={'CloudWatchOutputEnabled': False}
         )
 
         command_id = response['Command']['CommandId']
-        print(f"✅ Command sent (Command ID: {command_id}). Waiting for results...")
+        print(f"✅ Command sent. Waiting for results... (Command ID: {command_id})")
 
-        # Wait for command to complete
         for _ in range(20):
             time.sleep(3)
             output = ssm.get_command_invocation(
                 CommandId=command_id,
                 InstanceId=instance_id
             )
-
             if output['Status'] in ['Success', 'Failed', 'Cancelled', 'TimedOut']:
                 break
 
@@ -49,9 +44,9 @@ def run_linux_disk_check(instance_id):
             print("\n📦 Disk Inspection Results:\n")
             print(output['StandardOutputContent'])
         else:
-            print(f"\n⚠️ Command finished with status: {output['Status']}")
+            print(f"\n⚠️ Command failed or incomplete: {output['Status']}")
             print("Error Output:\n", output['StandardErrorContent'])
 
     except Exception as e:
-        print(f"\n❌ Error running disk check: {e}")
+        print(f"\n❌ Error: {e}")
         sys.exit(1)
