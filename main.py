@@ -1,29 +1,70 @@
-from common import get_ssm_managed_instances
-from linux_check import run_linux_disk_check
-from tabulate import tabulate
+# main.py
+
+import boto3
 import sys
+from tabulate import tabulate
+from linux_check import run_disk_check  # Windows check can be added later
+
+def get_ssm_enabled_instances():
+    ec2 = boto3.client('ec2')
+    ssm = boto3.client('ssm')
+
+    instances = []
+    instance_refs = []
+
+    reservations = ec2.describe_instances(Filters=[{"Name": "instance-state-name", "Values": ["running"]}])['Reservations']
+    
+    for reservation in reservations:
+        for instance in reservation['Instances']:
+            instance_id = instance['InstanceId']
+            name = next((tag['Value'] for tag in instance.get('Tags', []) if tag['Key'] == 'Name'), "(No Name)")
+            
+            # Check if instance is SSM managed
+            try:
+                ssm_info = ssm.describe_instance_information(
+                    Filters=[{'Key': 'InstanceIds', 'Values': [instance_id]}]
+                )
+                if ssm_info['InstanceInformationList']:
+                    os_type = ssm_info['InstanceInformationList'][0]['PlatformName']
+                    volumes = ", ".join([
+                        bdm['Ebs']['VolumeId']
+                        for bdm in instance.get('BlockDeviceMappings', [])
+                        if 'Ebs' in bdm
+                    ])
+                    instances.append([
+                        len(instances) + 1, name, instance_id, os_type, volumes
+                    ])
+                    instance_refs.append({
+                        "id": instance_id,
+                        "name": name,
+                        "os": os_type
+                    })
+            except:
+                continue
+
+    return instances, instance_refs
 
 if __name__ == "__main__":
-    print("🔍 Fetching EC2 instances with SSM enabled...\n")
+    print("🔍 Fetching SSM-enabled EC2 instances...\n")
 
-    table, all_instances = get_ssm_managed_instances()
+    table, refs = get_ssm_enabled_instances()
 
     if not table:
-        print("❌ No SSM-enabled instances found.")
+        print("❌ No eligible instances found.")
         sys.exit(0)
 
     print(tabulate(table, headers=["#", "Instance Name", "Instance ID", "OS Type", "Volume IDs"], tablefmt="grid"))
 
     try:
         choice = int(input("\n💡 Enter the instance number to inspect disk usage: "))
-        selected = all_instances[choice - 1]
-        print(f"\n➡️ Selected: {selected['name'] or '(No Name)'} ({selected['id']})")
+        selected = refs[choice - 1]
+        print(f"\n➡️ Selected: {selected['name']} ({selected['id']})")
         print(f"📦 OS Detected: {selected['os']}")
 
         if selected['os'].lower() == 'linux':
-            run_linux_disk_check(selected['id'])
+            run_disk_check(selected['id'])
         else:
-            print("⚠️ Disk inspection for this OS is not yet implemented.")
+            print("⚠️ Windows check not implemented yet.")
     except (ValueError, IndexError):
         print("❌ Invalid selection.")
         sys.exit(1)
