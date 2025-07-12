@@ -1,6 +1,5 @@
-# main.py
-
 from common import get_ssm_managed_instances
+from linux_check import run_linux_disk_check
 from tabulate import tabulate
 import sys
 
@@ -20,8 +19,11 @@ if __name__ == "__main__":
         selected = all_instances[choice - 1]
         print(f"\n➡️ Selected: {selected['name'] or '(No Name)'} ({selected['id']})")
         print(f"📦 OS Detected: {selected['os']}")
-        print("🔗 Ready to run disk inspection (next step will trigger sub-script)...")
-        # Next: import and call linux_check.run(selected) or windows_check.run(selected)
+
+        if selected['os'].lower() == 'linux':
+            run_linux_disk_check(selected['id'])
+        else:
+            print("⚠️ Disk inspection for this OS is not yet implemented.")
     except (ValueError, IndexError):
         print("❌ Invalid selection.")
         sys.exit(1)
