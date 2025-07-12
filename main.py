@@ -3,7 +3,7 @@
 import boto3
 import sys
 from tabulate import tabulate
-from linux_check import run_disk_check  # Windows check can be added later
+from linux_check import run_disk_check  # Windows support can be added later
 
 def get_ssm_enabled_instances():
     ec2 = boto3.client('ec2')
@@ -19,7 +19,6 @@ def get_ssm_enabled_instances():
             instance_id = instance['InstanceId']
             name = next((tag['Value'] for tag in instance.get('Tags', []) if tag['Key'] == 'Name'), "(No Name)")
             
-            # Check if instance is SSM managed
             try:
                 ssm_info = ssm.describe_instance_information(
                     Filters=[{'Key': 'InstanceIds', 'Values': [instance_id]}]
@@ -61,7 +60,8 @@ if __name__ == "__main__":
         print(f"\n➡️ Selected: {selected['name']} ({selected['id']})")
         print(f"📦 OS Detected: {selected['os']}")
 
-        if selected['os'].lower() == 'linux':
+        # ✅ Check for Linux or Ubuntu
+        if 'linux' in selected['os'].lower() or 'ubuntu' in selected['os'].lower():
             run_disk_check(selected['id'])
         else:
             print("⚠️ Windows check not implemented yet.")
